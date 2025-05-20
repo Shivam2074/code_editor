@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Python Editor with Monaco and Terminal</title>
+<style>
+  html, body {
+    height: 100%;
+    margin: 0;
+    font-family: Arial, sans-serif;
+  }
+  h2 {
+    background-color: #28a745;
+    color: white;
+    text-align: center;
+    padding: 8px 0;
+    margin: 0 0 10px 0;
+    font-weight: bold;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  }
+
+  #toolbar-container {
+    width: 100%;
+    background-color: #e0e0e0;
+    padding: 8px 15px;
+    box-sizing: border-box;
+  }
+
+  #toolbar {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 8px;
+  }
+
+  #toolbar button {
+    padding: 6px 10px;
+    font-size: 18px;
+    cursor: pointer;
+    border-radius: 5px;
+    border: 1px solid #ccc;
+    background-color: #f8f9fa;
+    transition: background-color 0.2s ease;
+    width: 38px;
+    height: 38px;
+    line-height: 1;
+    text-align: center;
+  }
+
+  #toolbar button:hover {
+    background-color: #d4d4d4;
+  }
+
+  #file-tabs {
+    display: flex;
+    align-items: center;
+    border-bottom: 1px solid #ccc;
+    background-color: #f3f3f3;
+    padding: 0 10px;
+    user-select: none;
+    min-height: 40px;
+  }
+
+  #file-tabs .tab {
+    display: flex;
+    align-items: center;
+    padding: 6px 14px;
+    margin-right: 4px;
+    background: white;
+    border: 1px solid #ccc;
+    border-bottom: none;
+    border-top-left-radius: 4px;
+    border-top-right-radius: 4px;
+    cursor: pointer;
+    position: relative;
+    font-size: 14px;
+    user-select: none;
+  }
+
+  #file-tabs .tab.active {
+    background-color: white;
+    font-weight: bold;
+    border-color: #28a745;
+    color: #28a745;
+  }
+
+  #file-tabs .tab:hover {
+    background-color: #e6f0ea;
+  }
+
+  #file-tabs .tab .close-btn {
+    font-weight: bold;
+    margin-left: 8px;
+    cursor: pointer;
+    color: #888;
+    font-size: 16px;
+    user-select: none;
+  }
+
+  #file-tabs .tab .close-btn:hover {
+    color: #cc0000;
+  }
+
+  #file-tabs .new-file-btn {
+    font-size: 24px;
+    font-weight: bold;
+    padding: 6px 12px;
+    cursor: pointer;
+    border: none;
+    background: transparent;
+    color: #28a745;
+    user-select: none;
+  }
+
+  #file-tabs .new-file-btn:hover {
+    color: #1c6b1c;
+  }
+
+  #container {
+    height: 250px; /* shrinks when terminal opens */
+    border: 1px solid #ccc;
+    margin-top: 0;
+  }
+
+  #output {
+    white-space: pre-wrap;
+    background: #1e1e1e;
+    color: #d4d4d4;
+    padding: 10px;
+    margin-top: 10px;
+    height: 150px;
+    overflow-y: auto;
+    border: 1px solid #444;
+    font-family: monospace;
+  }
+
+  /* Editor controls buttons */
+  #editor-controls {
+    display: flex;
+    justify-content: left;
+    gap: 10px;
+    margin-top: 10px;
+  }
+
+  #editor-controls button {
+    padding: 5px 5px;
+    font-size: 16px;
+    cursor: pointer;
+    border-radius: 6px;
+    border: 1px solid #28a745;
+    background-color: #28a745;
+    color: white;
+    transition: background-color 0.3s ease;
+  }
+
+  #editor-controls button:hover {
+    background-color: #218838;
+  }
+
+  /* Terminal styling */
+  #terminal-container {
+    display: none; /* hidden initially */
+    height: 200px;
+    border: 1px solid #444;
+    margin-top: 10px;
+    background-color: black;
+  }
+
+  /* xterm.js CSS */
+  .xterm {
+    font-family: monospace;
+    font-size: 14px;
+    line-height: 1.2;
+  }
+
+</style>
+
+<!-- xterm.js CSS -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.1.0/css/xterm.min.css" />
+</head>
+<body>
+
+<h2>Python Online Editor</h2>
+
+<div id="toolbar-container">
+  <div id="toolbar">
+    <button title="Reset Code" onclick="resetCode()">🔄</button>
+    <button title="Undo" onclick="undo()">↩️</button>
+    <button title="Redo" onclick="redo()">↪️</button>
+    <button id="theme-toggle" title="Toggle Light/Dark Mode" onclick="toggleTheme()">🌞</button>
+  </div>
+
+  <div id="file-tabs">
+    <button class="new-file-btn" title="New File" onclick="addFile()">＋</button>
+  </div>
+</div>
+
+<div id="container"></div>
+
+<!-- Editor control buttons below the editor -->
+<div id="editor-controls">
+  <button onclick="runCode()">▶️ Run</button>
+  <button onclick="clearOutput()">🧹 Clear</button>
+  <button onclick="toggleExpand()">⛶ Expand</button>
+</div>
+
+<pre id="output"></pre>
+
+
+
+<script>
+  window.require = {
+    paths: { vs: "https://cdn.jsdelivr.net/npm/monaco-editor@0.34.1/min/vs" }
+  };
+</script>
+<script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.34.1/min/vs/loader.min.js"></script>
+
+<!-- xterm.js script -->
+<script src="https://cdn.jsdelivr.net/npm/xterm@5.1.0/lib/xterm.js"></script>
+
+
+<script>
+  let editor;
+  let currentTheme = 'vs-dark';
+  let fileCounter = 1;
+  let currentModel = null;
+  const models = {};
+  const defaultCode = `# Write Python code here\nprint("Hello, Python!")`;
+
+
+  require(["vs/editor/editor.main"], function () {
+    const model = monaco.editor.createModel(defaultCode, "python");
+    models["file1.py"] = model;
+    currentModel = model;
+
+    editor = monaco.editor.create(document.getElementById("container"), {
+      model: currentModel,
+      theme: currentTheme,
+      automaticLayout: true,
+    });
+
+    renderTabs();
+  });
+
+  function renderTabs() {
+    const tabsContainer = document.getElementById("file-tabs");
+    [...tabsContainer.querySelectorAll(".tab")].forEach(t => t.remove());
+
+    Object.keys(models).forEach(fileName => {
+      const tab = document.createElement("div");
+      tab.className = "tab" + (currentModel === models[fileName] ? " active" : "");
+      tab.textContent = fileName;
+      tab.title = fileName;
+
+      tab.onclick = () => switchFile(fileName);
+
+      const closeBtn = document.createElement("span");
+      closeBtn.className = "close-btn";
+      closeBtn.textContent = "×";
+      closeBtn.title = "Close file";
+      closeBtn.onclick = (e) => {
+        e.stopPropagation();
+        deleteFile(fileName);
+      };
+
+      tab.appendChild(closeBtn);
+      tabsContainer.insertBefore(tab, tabsContainer.querySelector(".new-file-btn"));
+    });
+  }
+
+  function switchFile(fileName) {
+    if (models[fileName]) {
+      currentModel = models[fileName];
+      editor.setModel(currentModel);
+      renderTabs();
+    }
+  }
+
+  function addFile() {
+    fileCounter++;
+    const fileName = `file${fileCounter}.py`;
+    const model = monaco.editor.createModel("", "python");
+    models[fileName] = model;
+    switchFile(fileName);
+  }
+
+  function deleteFile(fileName) {
+    if (Object.keys(models).length === 1) {
+      alert("At least one file must remain.");
+      return;
+    }
+    if (confirm(`Delete ${fileName}?`)) {
+      models[fileName].dispose();
+      delete models[fileName];
+      const remainingFiles = Object.keys(models);
+      switchFile(remainingFiles[0]);
+    }
+  }
+
+  function resetCode() {
+    if (currentModel) currentModel.setValue(defaultCode);
+  }
+
+  function undo() {
+    if (editor) editor.trigger('keyboard', 'undo', null);
+  }
+
+  function redo() {
+    if (editor) editor.trigger('keyboard', 'redo', null);
+  }
+
+  function toggleTheme() {
+    currentTheme = currentTheme === 'vs-dark' ? 'vs-light' : 'vs-dark';
+    monaco.editor.setTheme(currentTheme);
+    document.getElementById('theme-toggle').textContent =
+      currentTheme === 'vs-dark' ? '🌞' : '🌙';
+
+    
+  }
+
+  function getCookie(name) {
+    const value = `; ${document.cookie}`;
+    const parts = value.split(`; ${name}=`);
+    if (parts.length === 2) return parts.pop().split(';').shift();
+  }
+
+  function runCode() {
+    fetch('/run/', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': getCookie('csrftoken'),
+      },
+      body: JSON.stringify({ code: currentModel.getValue() })
+    })
+    .then(response => response.json())
+    .then(data => {
+      document.getElementById("output").textContent = data.output;
+    })
+    .catch(err => {
+      document.getElementById("output").textContent = "Error running code.";
+      console.error(err);
+    });
+  }
+
+  function clearOutput() {
+    document.getElementById('output').textContent = '';
+  }
+
+  
+
+  let expanded = false;
+  function toggleExpand() {
+    const container = document.getElementById('output');
+    const btns = document.getElementById('editor-controls').querySelectorAll('button');
+    if (!expanded) {
+      container.style.height = '80vh';
+      btns[3].textContent = '⬇️ Collapse';
+    } else {
+      container.style.height = terminalVisible ? '300px' : '400px';
+      btns[3].textContent = '⛶ Expand';
+    }
+    expanded = !expanded;
+    editor.layout();
+  }
+</script>
+
+</body>
+</html>
